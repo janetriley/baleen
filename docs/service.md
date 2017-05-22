@@ -128,7 +128,7 @@ $ cd /var/apps
 $ git clone https://github.com/bbengfort/baleen.git
 $ cd baleen/
 $ venv.init -a $(pwd) -r requirements.txt
-(baleen) $ echo $(pwd) > $(get_python_lib)/baleen.pth
+(baleen) $ add2virtualenv .
 ```
 
 **Note**: On Ubuntu 14.04 you also need to install the requests security package, see [SSL InsecurePlatform error when using Requests package](http://stackoverflow.com/questions/29099404/ssl-insecureplatform-error-when-using-requests-package):

@@ -22,7 +22,7 @@ This quick start is intended to get you setup with Baleen in development mode (s
 
 2. Create a virtualenv and install the dependencies
 
-    ```bash
+    ```bash    
     $ pyvenv venv  # or: virtualenv -p python3 venv
     $ source venv/bin/activate
     $ pip install -r requirements.txt
@@ -31,11 +31,9 @@ This quick start is intended to get you setup with Baleen in development mode (s
 
 3. Add the `baleen` module to your `$PYTHONPATH` via the virtualenv.
 
-    ```bash
-    $ echo $(pwd) > venv/lib/python3.x/site-packages/baleen.pth
+    ```bash    
+    $ add2virtualenv . 
     ```
-
-    Please replace *3.x* with the exact version of your Python.
 
 4. Install and start MongoDB: https://docs.mongodb.com/manual/installation/
 
