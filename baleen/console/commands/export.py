@@ -22,7 +22,9 @@ import baleen.models as db
 
 from commis import Command
 from baleen.console.utils import csv
-from baleen.export import MongoExporter, SCHEMES
+from baleen.export import MongoExporter, SCHEMES, JSON
+from baleen.utils.text import SAFE, SANITIZE_LEVELS
+
 from baleen.utils.timez import Timer
 
 
@@ -47,9 +49,15 @@ class ExportCommand(Command):
         },
         ('-S', '--scheme'): {
             'type': str,
-            'default': 'json',
+            'default': JSON,
             'choices': SCHEMES,
             'help': 'specify the output format for the corpus',
+        },
+        ('-Z', '--sanitize'): {
+            'type': str,
+            'default': SAFE,
+            'choices': SANITIZE_LEVELS,
+            'help': 'specify what sanitization to apply to html exports',
         },
         'location': {
             'nargs': 1,
@@ -69,7 +77,7 @@ class ExportCommand(Command):
 
         # Create the exporter object
         exporter = MongoExporter(
-            root, categories=args.categories, scheme=args.scheme
+            root, categories=args.categories, scheme=args.scheme, sanitize_level=args.sanitize
         )
 
         # If list categories is true, list them and exit.
@@ -77,7 +85,7 @@ class ExportCommand(Command):
             return "\n".join(sorted(exporter.categories))
 
         with Timer() as t:
-            exporter.export(level=args.scheme)
+            exporter.export()
 
         return (
             "Baleen corpus export complete in {}\n"

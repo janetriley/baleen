@@ -103,6 +103,8 @@ class ExportTests(unittest.TestCase):
 
         assert Feed.objects.count() == 3
         assert Post.objects.count() == 3
+        cls.root_dir = "/tmp"
+        cls.corpus_dir = "/tmp/corpus"
 
     @classmethod
     def tearDownClass(self):
@@ -120,21 +122,21 @@ class ExportTests(unittest.TestCase):
         # Make sure good schemes don't error
         for scheme in SCHEMES:
             try:
-                exporter = MongoExporter("/tmp/corpus", scheme=scheme)
+                exporter = MongoExporter(root=self.corpus_dir, scheme=scheme)
             except ExportError:
                 self.fail("Could not use expected scheme, {}".format(scheme))
 
         # Make sure bad schemes do error
         for scheme in ('bson', 'xml', 'yaml', 'foo', 'bar'):
             with self.assertRaises(ExportError):
-                exporter = MongoExporter("/tmp/corpus", scheme=scheme)
+                exporter = MongoExporter(root=self.corpus_dir, scheme=scheme)
 
     def test_categories_default(self):
         """
         Assert that categories are set to default when not provided
         """
 
-        exporter = MongoExporter("/tmp/corpus")
+        exporter = MongoExporter(root=self.corpus_dir)
         self.assertCountEqual(CATEGORIES_IN_DB, exporter.categories)
 
     def test_categories_provided(self):
@@ -142,14 +144,14 @@ class ExportTests(unittest.TestCase):
         Assert that provided categories are returned
         """
         categories = ["TestCategory", "Another Category", "Unicode ĆăƮĖƓƠŕƔ"]
-        exporter = MongoExporter("/tmp/corpus", categories=categories)
+        exporter = MongoExporter(root=self.corpus_dir, categories=categories)
         self.assertCountEqual(categories, exporter.categories)
 
     def test_feeds_for_list_of_categories(self):
         """
         Assert that getting feeds for a list of categories works
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         expected_feeds = [POLITICS_FEED, FOOD_FEED]
         test_categories = ["politics", "food"]
         self.assertCountEqual(expected_feeds, exporter.feeds(categories=test_categories))
@@ -158,21 +160,21 @@ class ExportTests(unittest.TestCase):
         """
         Assert that getting feeds for a category as a string
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         self.assertCountEqual([POLITICS_FEED], exporter.feeds(categories="politics"))
 
     def test_feeds_for_all_categories(self):
         """
         Assert that getting feeds with a category returns for all categories
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         self.assertCountEqual([POLITICS_FEED, FOOD_FEED, BOOKS_FEED], exporter.feeds())
 
     def test_writing_readme(self):
         """
         Assert that a readme file is written correctly
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         exporter.state = State.Finished
         exporter.readme("/tmp/readme")
 
@@ -182,7 +184,7 @@ class ExportTests(unittest.TestCase):
         """
         Assert writing readme file fails when in an incorrect state
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         with self.assertRaises(ExportError):
             exporter.readme("/tmp/readme")
 
@@ -190,7 +192,7 @@ class ExportTests(unittest.TestCase):
         """
         Assert generating posts fails when in an incorrect state
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         exporter.state = "Some crazy thing"
         with self.assertRaises(ExportError):
             for post, category in exporter.posts():
@@ -207,7 +209,7 @@ class ExportTests(unittest.TestCase):
         """
         Assert that we can export posts
         """
-        exporter = MongoExporter("/tmp/corpus", categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
 
         # Mock Mongo calls that aren't supported in MockMongoClient
         post_categories = [
@@ -222,7 +224,7 @@ class ExportTests(unittest.TestCase):
         """
         Assert that root path failures are raised
         """
-        root_path = "/tmp/corpus"
+        root_path = self.corpus_dir
         exporter = MongoExporter(root_path, categories=CATEGORIES_IN_DB)
         os.path.exists = lambda path: False if path == root_path else True
         os.mkdir = lambda success: True  # Mock directory creation
@@ -235,10 +237,9 @@ class ExportTests(unittest.TestCase):
         """
         Assert that category path failures are raised
         """
-        root_path = "/tmp/corpus"
-        exporter = MongoExporter(root_path, categories=CATEGORIES_IN_DB)
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         for category in CATEGORIES_IN_DB:
-            category_path = os.path.join(root_path, category)
+            category_path = os.path.join(self.corpus_dir, category)
             os.path.exists = lambda path: False if path == category_path else True
             os.mkdir = lambda success: True  # Mock directory creation
             os.path.isdir = lambda path: False if path == category_path else True
@@ -246,4 +247,20 @@ class ExportTests(unittest.TestCase):
             with self.assertRaises(ExportError):
                 exporter.export()
 
+    def test_export_with_invalid_sanitization(self):
+        """
+        Assert that export requires a valid
+        """
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
 
+        with self.assertRaises(ExportError):
+            exporter.export(level="BOGUS")
+
+    def test_export_with_invalid_scheme(self):
+        """
+        Assert that export requires a valid
+        """
+        exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
+
+        with self.assertRaises(ExportError):
+            exporter.export(scheme="BOGUS")

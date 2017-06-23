@@ -31,9 +31,15 @@ from baleen.models import Feed, Post
 from baleen.utils.text import sanitize_html, SAFE, SANITIZE_LEVELS
 
 DTFMT = "%b %d, %Y at %H:%M"
-EXPORT_FORMATS = ('json', 'html')
-SCHEMES = EXPORT_FORMATS + SANITIZE_LEVELS
+JSON = 'json'
+HTML = 'html'
+SCHEMES = (JSON, HTML)
 State = Enum('State', 'Init, Started, Finished')
+
+INVALID_SANITIZE_LEVEL = "Unknown sanitization method: '{{}}' - use one of {LEVELS}.".format(
+    LEVELS=(", ".join(SANITIZE_LEVELS)))
+INVALID_EXPORT_SCHEME = "Unknown export format scheme '{{}}' - use one of {SCHEMES}.".format(
+    SCHEMES=", ".join(SCHEMES))
 
 
 ##########################################################################
@@ -46,19 +52,23 @@ class MongoExporter(object):
     writing posts to disk in either HTML or JSON format.
     """
 
-    def __init__(self, root, categories=None, scheme='json'):
+    def __init__(self, root, categories=None, scheme=JSON, sanitize_level=SAFE):
+        scheme = scheme.lower()
+
+        if not self.valid_scheme(scheme):
+            raise ExportError(INVALID_EXPORT_SCHEME.format(scheme))
+        else:
+            self.scheme = scheme  # Output format of the data
+
+        if not self.valid_sanitize_level(sanitize_level):
+            raise ExportError(INVALID_SANITIZE_LEVEL.format(sanitize_level))
+        else:
+            self.sanitize_level = sanitize_level  # Sanitization to apply to content
+
         self.root = root  # Location on disk to write to
-        self.scheme = scheme.lower()  # Output format of the data
         self.state = State.Init  # Current state of the export
         self.counts = Counter()  # Counts of posts per category
         self.categories = categories  # Specific categories to export
-
-        if self.scheme not in SCHEMES:
-            raise ExportError(
-                "Unknown export scheme: '{}' - use one of {}.".format(
-                    self.scheme, ", ".join(SCHEMES)
-                )
-            )
 
     @property
     def categories(self):
@@ -169,60 +179,98 @@ class MongoExporter(object):
         with open(path, 'w') as f:
             f.write(feeds.to_json(indent=2))
 
-    def export(self, root=None, categories=None, level=SAFE):
+    def export(self, root=None, categories=None, scheme=JSON, level=SAFE):
         """
-        Runs the export of the posts to disk.
+        Export all posts in categories to disk.
         """
-        self.root = root or self.root
+
+        root = root or self.root
+        categories = categories or self.categories
+
+        scheme = scheme or self.scheme
+        level = level or self.sanitize_level
+        if not self.valid_scheme(scheme):
+            raise ExportError(INVALID_EXPORT_SCHEME.format(scheme))
+
+        if not self.valid_sanitize_level(level):
+            raise ExportError(INVALID_SANITIZE_LEVEL.format(level))
+
+        self.initialize_export_directory(root)
+        category_filepaths = self.initialize_category_dirs(base_dir=root,    
+                                                           categories=categories)
 
         # Reset the counts object and mark export as started.
         self.counts = Counter()
         self.state = State.Started
 
-        # Make the directory to export if it doesn't exist.
-        if not os.path.exists(self.root):
-            os.mkdir(self.root)
-
-        # If the root is not a directory, then we can't write there.
-        if not os.path.isdir(self.root):
-            raise ExportError(
-                "'{}' is not a directory!".format(self.root)
-            )
-
-        # Create the directories for each category on disk and map paths.
-        catdir = {}
-        for category in self.categories:
-            path = os.path.join(self.root, category)
-
-            if not os.path.exists(path):
-                os.mkdir(path)
-
-            if not os.path.isdir(path):
-                raise ExportError(
-                    "'{}' is not a directory!".format(path)
-                )
-
-            catdir[category] = path
-
         # Iterate through all posts, writing them to disk correctly.
         # Right now we will simply write them based on their object id.
-        for post, category in tqdm(self.posts(), total=Post.objects.count(), unit="docs"):
-            path = os.path.join(
-                self.root, catdir[category], "{}.{}".format(post.id, self.scheme)
-            )
+        for post, category in tqdm(self.posts(categories=categories),
+                                   total=Post.objects.count(),
+                                   unit="docs"):
+
+            path = os.path.join(category_filepaths[category], "{}.{}".format(post.id, self.scheme))
 
             with codecs.open(path, 'w', encoding='utf-8') as f:
                 action = {
-                    'json': lambda: post.to_json(indent=2),
-                    'html': lambda: post.htmlize(sanitize=level)
+                    JSON: lambda: post.to_json(indent=2),
+                    HTML: lambda: post.htmlize(sanitize=level)
                 }[self.scheme]
 
                 f.write(action())
 
         # Mark the export as finished and write the README to the corpus.
         self.state = State.Finished
-        self.readme(os.path.join(self.root, "README"))
-        self.feedinfo(os.path.join(self.root, "feeds.json"))
+        self.readme(os.path.join(root, "README"))
+        self.feedinfo(os.path.join(root, "feeds.json"))
+
+    @classmethod
+    def initialize_category_dirs(cls, base_dir, categories):
+        """
+        Create the directories for each category on disk and map paths.
+        :param base_dir: the absolute filepath to create the category directories in
+        :param categories: an iterable of category names
+        :return: a dict of categories and their filepath, { 'category1': 'filepath1' }
+        """
+        catdir = {}
+        for category in categories:
+            path = os.path.join(base_dir, category)
+
+            if not os.path.exists(path):
+                os.mkdir(path)
+
+            if not os.path.isdir(path):
+                raise ExportError(
+                    "Could not create directory '{}'!".format(path)
+                )
+
+            catdir[category] = path
+
+        return catdir
+
+    @classmethod
+    def initialize_export_directory(cls, directory):
+        # Make the directory to export if it doesn't exist.
+        if not os.path.exists(directory):
+            os.mkdir(directory)
+
+        # If the root is not a directory, then we can't write there.
+        if not os.path.isdir(directory):
+            raise ExportError(
+                "'{}' is not a directory!".format(directory)
+            )
+
+    @classmethod
+    def valid_sanitize_level(self, level):
+        """
+        :param level: sanitization level
+        :return: Boolean
+        """
+        return (not level) or (level in SANITIZE_LEVELS)
+
+    @classmethod
+    def valid_scheme(cls, scheme):
+        return (not scheme) or (scheme in SCHEMES)
 
 
 if __name__ == '__main__':
