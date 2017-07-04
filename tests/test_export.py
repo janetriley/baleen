@@ -22,6 +22,8 @@ from unittest.mock import MagicMock
 
 from mongomock import MongoClient as MockMongoClient
 
+from tempfile import mkdtemp
+
 from baleen.export import *
 from baleen.feed import *
 from baleen.models import connect
@@ -103,8 +105,8 @@ class ExportTests(unittest.TestCase):
 
         assert Feed.objects.count() == 3
         assert Post.objects.count() == 3
-        cls.root_dir = "/tmp"
-        cls.corpus_dir = "/tmp/corpus"
+        cls.root_dir = mkdtemp(prefix="baleen")
+        cls.corpus_dir = "{}/corpus".format(cls.root_dir)
 
     @classmethod
     def tearDownClass(self):
@@ -176,7 +178,7 @@ class ExportTests(unittest.TestCase):
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         exporter.state = State.Finished
-        exporter.readme("/tmp/readme")
+        exporter.readme("{}/readme".format(self.root_dir))
 
         # TODO Assert appropriate readme file
 
@@ -186,7 +188,7 @@ class ExportTests(unittest.TestCase):
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         with self.assertRaises(ExportError):
-            exporter.readme("/tmp/readme")
+            exporter.readme("{}/readme".format(self.root_dir))
 
     def test_generating_posts_fails(self):
         """
