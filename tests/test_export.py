@@ -106,7 +106,7 @@ class ExportTests(unittest.TestCase):
         assert Feed.objects.count() == 3
         assert Post.objects.count() == 3
         cls.root_dir = mkdtemp(prefix="baleen")
-        cls.corpus_dir = "{}/corpus".format(cls.root_dir)
+        cls.corpus_dir = os.path.join(cls.root_dir, "corpus")
 
     @classmethod
     def tearDownClass(self):
@@ -178,7 +178,7 @@ class ExportTests(unittest.TestCase):
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         exporter.state = State.Finished
-        exporter.readme("{}/readme".format(self.root_dir))
+        exporter.readme = os.path.join(self.root_dir, "readme")
 
         # TODO Assert appropriate readme file
 
@@ -188,7 +188,7 @@ class ExportTests(unittest.TestCase):
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         with self.assertRaises(ExportError):
-            exporter.readme("{}/readme".format(self.root_dir))
+            exporter.readme = os.path.join(self.root_dir, "readme")
 
     def test_generating_posts_fails(self):
         """
