@@ -216,12 +216,21 @@ class ExportTests(unittest.TestCase):
             for post, category in exporter.posts():
                 self.fail("Should never get to the point where we touch posts")
 
-    """
-    MockMongoClient doesn't have a rewind method:
-    https://github.com/vmalloc/mongomock/blob/develop/mongomock/collection.py#L1498
 
-    This forces us to mock the post() method here.
-    """
+    def _mock_missing_mongo_calls(self, exporter):
+        """
+        MockMongoClient doesn't have a rewind method:
+        https://github.com/vmalloc/mongomock/blob/develop/mongomock/collection.py#L1498
+
+        This forces us to mock the post() method here.
+        """
+        post_categories = [
+            (BOOKS_POST, BOOKS_FEED.category),
+            (FOOD_POST, FOOD_FEED.category),
+            (POLITICS_POST, POLITICS_FEED.category),
+        ]
+        exporter.posts = MagicMock(return_value=post_categories)
+
 
     def test_export(self):
         """
@@ -229,14 +238,9 @@ class ExportTests(unittest.TestCase):
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
 
-        # Mock Mongo calls that aren't supported in MockMongoClient
-        post_categories = [
-            (BOOKS_POST, BOOKS_FEED.category),
-            (FOOD_POST, FOOD_FEED.category),
-            (POLITICS_POST, POLITICS_FEED.category),
-        ]
-        exporter.posts = MagicMock(return_value=post_categories)
+        self._mock_missing_mongo_calls(exporter)
         exporter.export()
+
 
     def test_export_with_root_path_failure(self):
         """
@@ -256,7 +260,7 @@ class ExportTests(unittest.TestCase):
         Assert that category path failures are raised
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
-
+        self._mock_missing_mongo_calls(exporter=exporter)
         for category in CATEGORIES_IN_DB:
             category_path = os.path.join(self.corpus_dir, category)
             os.path.exists = lambda path: False if path == category_path else True
