@@ -213,14 +213,17 @@ class MongoExporter(object):
 
             path = os.path.join(category_filepaths[category], "{}.{}".format(post.id, self.scheme))
 
-            with codecs.open(path, 'w', encoding='utf-8') as f:
-                action = {
-                    JSON: lambda: post.to_json(indent=2),
-                    HTML: lambda: post.htmlize(sanitize=level)
-                }[self.scheme]
+            try:
+                with codecs.open(path, 'w', encoding='utf-8') as f:
+                    action = {
+                        JSON: lambda: post.to_json(indent=2),
+                        HTML: lambda: post.htmlize(sanitize=level)
+                    }[self.scheme]
 
-                f.write(action())
-
+                    f.write(action())
+            except FileNotFoundError as e:
+                msg = "FileNotFoundError ({0}): {1}".format(e.errno, e.strerror)
+                raise ExportError(msg)
         # Mark the export as finished and write the README to the corpus.
         self.state = State.Finished
         self.readme(os.path.join(root, "README"))
