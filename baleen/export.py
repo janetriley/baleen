@@ -196,8 +196,8 @@ class MongoExporter(object):
             raise ExportError(INVALID_SANITIZE_LEVEL.format(level))
 
         self.initialize_export_directory(root)
-        category_filepaths = self.initialize_category_dirs(base_dir=root,    
-                                                           categories=categories)
+
+        category_filepaths = {}
 
         # Reset the counts object and mark export as started.
         self.counts = Counter()
@@ -208,6 +208,8 @@ class MongoExporter(object):
         for post, category in tqdm(self.posts(categories=categories),
                                    total=Post.objects.count(),
                                    unit="docs"):
+            if not hasattr(category_filepaths, category):
+                category_filepaths[category] = self.initialize_category_dir(root, category)
 
             path = os.path.join(category_filepaths[category], "{}.{}".format(post.id, self.scheme))
 
@@ -225,28 +227,16 @@ class MongoExporter(object):
         self.feedinfo(os.path.join(root, "feeds.json"))
 
     @classmethod
-    def initialize_category_dirs(cls, base_dir, categories):
+    def initialize_category_dir(cls, base_dir, category):
         """
-        Create the directories for each category on disk and map paths.
-        :param base_dir: the absolute filepath to create the category directories in
-        :param categories: an iterable of category names
-        :return: a dict of categories and their filepath, { 'category1': 'filepath1' }
+        Create a directory for a category
+        :param base_dir: the absolute filepath to create the category directory in
+        :param category: an iterable of category names
+        :return: a string of the filepath
         """
-        catdir = {}
-        for category in categories:
-            path = os.path.join(base_dir, category)
-
-            if not os.path.exists(path):
-                os.mkdir(path)
-
-            if not os.path.isdir(path):
-                raise ExportError(
-                    "Could not create directory '{}'!".format(path)
-                )
-
-            catdir[category] = path
-
-        return catdir
+        path = os.path.join(base_dir, category)
+        cls.initialize_export_directory(path)
+        return path
 
     @classmethod
     def initialize_export_directory(cls, directory):
