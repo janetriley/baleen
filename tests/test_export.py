@@ -19,10 +19,11 @@ Test the export module - to generate a corpus for machine learning.
 
 import unittest
 from unittest.mock import MagicMock
+import shutil
 
 from mongomock import MongoClient as MockMongoClient
 
-from tempfile import mkdtemp
+from tempfile import mkdtemp, TemporaryDirectory
 
 from baleen.export import *
 from baleen.feed import *
@@ -79,6 +80,7 @@ CATEGORIES_IN_DB = [
 ##########################################################################
 
 class ExportTests(unittest.TestCase):
+
     @classmethod
     def setUpClass(cls):
         """
@@ -105,16 +107,30 @@ class ExportTests(unittest.TestCase):
 
         assert Feed.objects.count() == 3
         assert Post.objects.count() == 3
-        cls.root_dir = mkdtemp(prefix="baleen")
-        cls.corpus_dir = os.path.join(cls.root_dir, "corpus")
+
+        # make a temp directory
+        cls.root_dir = TemporaryDirectory(prefix=u"baleen")
+        cls.corpus_dir = os.path.join(cls.root_dir.name, "corpus")
+        cls.readme_path = os.path.join(cls.root_dir.name, "readme")
+
 
     @classmethod
-    def tearDownClass(self):
+    def tearDownClass(cls):
         """
-        Drop the mongomock connection
+        Drop the mongomock connection and clean up our temporary dir
         """
-        assert isinstance(self.conn, MockMongoClient)
-        self.conn = None
+        assert isinstance(cls.conn, MockMongoClient)
+        cls.conn = None
+        cls.root_dir.cleanup()
+
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        if os.path.isdir(self.corpus_dir):
+            shutil.rmtree(self.corpus_dir, ignore_errors=True)
+        if os.path.isfile(self.readme_path):
+            os.remove(self.readme_path)
 
     def test_scheme_specification(self):
         """
@@ -178,17 +194,17 @@ class ExportTests(unittest.TestCase):
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
         exporter.state = State.Finished
-        exporter.readme = os.path.join(self.root_dir, "readme")
-
-        # TODO Assert appropriate readme file
+        exporter.readme(self.readme_path)
+        self.assertTrue(os.path.isfile(self.readme_path))
 
     def test_writing_readme_fails(self):
         """
         Assert writing readme file fails when in an incorrect state
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
+        exporter.state = State.Started
         with self.assertRaises(ExportError):
-            exporter.readme = os.path.join(self.root_dir, "readme")
+            exporter.readme(self.readme_path)
 
     def test_generating_posts_fails(self):
         """
@@ -240,18 +256,19 @@ class ExportTests(unittest.TestCase):
         Assert that category path failures are raised
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
+
         for category in CATEGORIES_IN_DB:
             category_path = os.path.join(self.corpus_dir, category)
             os.path.exists = lambda path: False if path == category_path else True
             os.mkdir = lambda success: True  # Mock directory creation
             os.path.isdir = lambda path: False if path == category_path else True
 
-            with self.assertRaises(ExportError):
-                exporter.export()
+        with self.assertRaises(ExportError):
+            exporter.export()
 
     def test_export_with_invalid_sanitization(self):
         """
-        Assert that export requires a valid
+        Assert that export requires a valid level
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
 
@@ -260,7 +277,7 @@ class ExportTests(unittest.TestCase):
 
     def test_export_with_invalid_scheme(self):
         """
-        Assert that export requires a valid
+        Assert that export requires a valid scheme
         """
         exporter = MongoExporter(root=self.corpus_dir, categories=CATEGORIES_IN_DB)
 
